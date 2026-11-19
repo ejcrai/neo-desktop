@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Document</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<!--
+  NEO piece template · DOCUMENT WITH COMMENTS
+  R10 · NEO Studio style: "slate" is the mono label («01 · Images»); words between *asterisks* in a title are its italic accent
+  ending. Keep text to the minimum: the visual carries half the story.
+  A readable document; the person taps any paragraph to leave a comment on it, sees them in the side rail, and sends them all to NEO
+  as their words. Fill #neo-data: sections with a heading and paragraphs (plain text; **bold** and *italic* are honored), and optional
+  "media" per section: images, films or sounds ({type, src | versionId, caption, poster}) — project files come through the {neo:"file"}
+  bridge as bytes and play from the page's own blob: URL.
+  Self-contained, no network. Anchors: "doc", "section-<id>", "para-<id>-<n>", "comments", "send".
+-->
+<style>
+  /* NEO R10 · NEO Studio's design language: copper and obsidian, a serif headline with an italic accent ending, mono slates,
+     little text, the visual carries half the story. Fonts degrade to system fonts when the frame has no network. */
+  :root { --serif: "Instrument Serif", Georgia, "Times New Roman", serif; --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --bg: #15120F; --bg-2: #1E1914; --bg-3: #2A231C; --ink: #F8F4EF; --soft: rgba(248,244,239,.74); --faint: rgba(248,244,239,.5);
+    --line: rgba(248,244,239,.12); --accent: #E0732A; --ok: #3FA06B; --no: #C9544A; --ease: cubic-bezier(.2,.7,.2,1); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased; overflow: hidden; }
+  body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(60% 50% at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); }
+  body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9; opacity: .06; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  .app { position: relative; z-index: 1; }
+  button, textarea { font: inherit; }
+  .slate { display: block; font: 500 11px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+  .slate:empty { display: none; }
+  h1 { margin: 0; font: 400 clamp(22px, 4.4vw, 34px)/1.04 var(--serif); letter-spacing: -.012em; color: var(--ink); text-wrap: balance; }
+  h1 em, h2 em { font-style: italic; color: var(--accent); }
+  .mono { font: 500 12px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+  button:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .pill { height: 44px; padding: 0 22px; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent); color: #17120E; font-weight: 700;
+    cursor: pointer; transition: transform .25s var(--ease), box-shadow .25s; }
+  .pill:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 40%, transparent); }
+  .pill:disabled { opacity: .45; cursor: default; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+  :root { --paper: #FCFAF7; --paper-ink: #17120E; --paper-soft: #55493F; --paper-faint: #7A6C5F; --paper-line: rgba(23,18,14,.1); }
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 300px; height: 100vh; }
+  .doc { min-height: 0; overflow: auto; padding: clamp(14px, 4vw, 40px) clamp(12px, 5vw, 56px); }
+  .sheet { max-width: 720px; margin: 0 auto; background: var(--paper); color: var(--paper-ink); border-radius: 18px; padding: clamp(20px, 5vw, 52px); box-shadow: 0 24px 70px rgba(0,0,0,.45);
+    font: 16px/1.65 var(--sans); }
+  .sheet .slate { color: #A8461A; }
+  .sheet h1 { color: var(--paper-ink); font-size: clamp(28px, 5vw, 44px); margin: 0 0 8px; }
+  .sheet h1 em { color: #E0732A; }
+  .sub { margin: 0 0 26px; color: var(--paper-soft); font-size: 15px; }
+  .sheet h2 { font: 400 clamp(21px, 3vw, 26px)/1.15 var(--serif); margin: 30px 0 10px; color: var(--paper-ink); }
+  .sheet h2::before { content: attr(data-n); display: block; font: 500 11px/1.2 var(--mono); letter-spacing: .14em; color: #A8461A; margin-bottom: 6px; }
+  .sheet h2:not([data-n])::before { display: none; }
+  p.para { margin: 0 0 12px; padding: 4px 8px; margin-left: -8px; border-radius: 8px; cursor: pointer; color: var(--paper-soft); transition: background .15s; }
+  p.para b { color: var(--paper-ink); }
+  p.para:hover { background: rgba(224,115,42,.08); }
+  p.para.has { background: rgba(224,115,42,.14); box-shadow: inset 3px 0 0 var(--accent); }
+  figure { margin: 16px 0 20px; } figure img, figure video { width: 100%; max-height: 62vh; object-fit: contain; display: block; border-radius: 12px; background: #000; }
+  figure audio { width: 100%; } figcaption { margin-top: 8px; color: var(--paper-faint); font: 500 11px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .rail { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--bg-2); color: var(--ink); font: 14px/1.45 var(--sans); border-left: 1px solid var(--line); }
+  .rail h3 { margin: 0; padding: 18px 16px 10px; font: 500 11px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+  .list { overflow: auto; padding: 0 12px; display: flex; flex-direction: column; gap: 8px; }
+  .c { border: 1px solid var(--line); border-radius: 14px; padding: 10px; background: rgba(255,255,255,.03); }
+  .c q { display: block; color: var(--faint); font-size: 12.5px; margin-bottom: 6px; quotes: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c textarea { width: 100%; min-height: 54px; resize: vertical; border-radius: 10px; border: 1px solid var(--line); background: rgba(0,0,0,.25); color: inherit; padding: 8px; }
+  .c .x { float: right; border: 0; background: none; color: var(--faint); cursor: pointer; font-size: 16px; }
+  .empty { color: var(--faint); padding: 4px; font-size: 13px; }
+  .foot { padding: 12px; } .send { width: 100%; }
+  @media (max-width: 760px) { .app { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 40vh; } .rail { border-left: 0; border-top: 1px solid var(--line); } }
+
+  /* R10.1 design · the projection room, shared with NEO Studio: a claqueta along the top, viewfinder corners, grain, and the copper
+     pill with its inner light and a sweep of light under the hand. Reduced motion: no sweep. */
+  body::before { content: ""; position: fixed; left: 0; right: 0; top: 0; height: 6px; z-index: 50; pointer-events: none;
+    background: repeating-linear-gradient(-55deg, var(--accent) 0 12px, #15120F 12px 24px); }
+  body::after { content: ""; position: fixed; inset: 12px; z-index: 49; pointer-events: none; opacity: .55;
+    background:
+      linear-gradient(var(--ink), var(--ink)) top left / 18px 2px no-repeat, linear-gradient(var(--ink), var(--ink)) top left / 2px 18px no-repeat,
+      linear-gradient(var(--ink), var(--ink)) top right / 18px 2px no-repeat, linear-gradient(var(--ink), var(--ink)) top right / 2px 18px no-repeat,
+      linear-gradient(var(--ink), var(--ink)) bottom left / 18px 2px no-repeat, linear-gradient(var(--ink), var(--ink)) bottom left / 2px 18px no-repeat,
+      linear-gradient(var(--ink), var(--ink)) bottom right / 18px 2px no-repeat, linear-gradient(var(--ink), var(--ink)) bottom right / 2px 18px no-repeat; }
+  .pill { position: relative; isolation: isolate; overflow: hidden; border-color: rgba(255,214,180,.35);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 80%, #fff), var(--accent) 55%, color-mix(in srgb, var(--accent) 88%, #000));
+    box-shadow: inset 0 1px 0 rgba(255,236,214,.55), inset 0 -1px 0 rgba(120,40,0,.25), 0 6px 18px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .pill::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; transform: translateX(-120%); transition: transform .7s var(--ease);
+    background: linear-gradient(105deg, transparent 30%, rgba(255,248,240,.45) 50%, transparent 70%); }
+  .pill:hover:not(:disabled)::after { transform: translateX(120%); }
+  .pill:active:not(:disabled) { transform: translateY(0) scale(.985); }
+  h1 { letter-spacing: -.025em; }
+  .slate { display: inline-flex; align-items: center; gap: 10px; }
+  .slate::before { content: ""; width: 22px; height: 3px; border-radius: 2px; background: currentColor; flex: none; }
+  button:focus-visible, textarea:focus-visible, [tabindex]:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 55%, transparent); }
+  @media (prefers-reduced-motion: reduce) { .pill::after { display: none; } .pill, .pill:active:not(:disabled) { transition: none; transform: none; } }
+</style>
+</head>
+<body>
+<script type="application/json" id="neo-data">
+{
+  "slate": "03 · Plan",
+  "title": "Launch *plan*",
+  "subtitle": "Draft for your review",
+  "accent": "#E0732A",
+  "sections": [
+    { "id": "goal", "heading": "Goal", "paragraphs": ["Reach **500 sign-ups** in the first month.", "Keep the cost per sign-up under the target."] },
+    { "id": "steps", "heading": "Steps", "paragraphs": ["Week 1: landing page and waitlist.", "Week 2: social campaign with *three* creatives."] }
+  ]
+}
+</script>
+<div class="app">
+  <div class="doc" data-anchor="doc"><article class="sheet" id="sheet"></article></div>
+  <aside class="rail"><h3>Comments</h3><div class="list" id="list" data-anchor="comments"></div>
+    <div class="foot"><button class="send pill" id="send" data-anchor="send" disabled>Send comments</button></div></aside>
+</div>
+<script>
+(function () {
+  var NEO = {
+    answer: function (text) { try { parent.postMessage({ neo: "answer", text: String(text) }, "*"); } catch (e) {} },
+    /* A project file's bytes through the host's bridge (moved, not copied) → a blob: URL this page owns. */
+    file: function (versionId) {
+      return new Promise(function (res, rej) {
+        var req = Math.random().toString(36).slice(2), done = false;
+        function on(e) {
+          var d = e.data || {};
+          if (d.neo !== "file" || d.req !== req) return;
+          window.removeEventListener("message", on); done = true;
+          if (d.error) return rej(d.error);
+          var mime = d.mime || "application/octet-stream";
+          if (d.buffer) { try { return res({ url: URL.createObjectURL(new Blob([d.buffer], { type: mime })), mime: mime, name: d.name || "" }); } catch (x) {} }
+          if (d.url) return res({ url: d.url, mime: mime, name: d.name || "" });
+          rej("unavailable");
+        }
+        window.addEventListener("message", on);
+        setTimeout(function () { if (!done) { window.removeEventListener("message", on); rej("timeout"); } }, 180000);
+        try { parent.postMessage({ neo: "file", req: req, versionId: versionId, want: "buffer" }, "*"); } catch (x) { rej(x); }
+      });
+    },
+    /* An item's media → {url, type}: its own data: src ("src" | "image" | "video" | "audio"), or its project file ("versionId"). */
+    media: function (it) {
+      var own = it.src || it.image || it.video || it.audio || "";
+      var guess = function (mime, src) {
+        if (it.type) return it.type;
+        if (it.video || /^video\//.test(mime) || /^data:video/i.test(src)) return "video";
+        if (it.audio || /^audio\//.test(mime) || /^data:audio/i.test(src)) return "audio";
+        return "image";
+      };
+      if (own) return Promise.resolve({ url: own, type: guess("", own) });
+      if (it.versionId) return NEO.file(it.versionId).then(function (f) { return { url: f.url, type: guess(f.mime, "") }; });
+      return Promise.resolve(null);
+    },
+    /* The element for a media item; a film or a sound shows its still ("poster") only if playback really fails. */
+    node: function (m, it, onFail) {
+      var fail = function () { if (it.poster) { var im = new Image(); im.src = it.poster; im.alt = it.title || ""; onFail(im); } else onFail(null); };
+      if (m.type === "video") {
+        var v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
+        if (it.poster) v.poster = it.poster;
+        v.addEventListener("error", fail); v.src = m.url; return v;
+      }
+      if (m.type === "audio") { var a = document.createElement("audio"); a.controls = true; a.preload = "metadata"; a.addEventListener("error", function () { onFail(null); }); a.src = m.url; return a; }
+      var im = new Image(); im.src = m.url; im.alt = it.title || ""; return im;
+    }
+  };
+  /* A headline with its italic accent ending: words between *asterisks* become <em> (text only, never HTML). */
+  function headline(el, text) {
+    el.textContent = "";
+    String(text || "").split(/\*([^*]+)\*/).forEach(function (part, k) {
+      if (!part) return;
+      if (k % 2) { var em = document.createElement("em"); em.textContent = part; el.appendChild(em); } else el.appendChild(document.createTextNode(part));
+    });
+  }
+  var data = {}; try { data = JSON.parse(document.getElementById("neo-data").textContent || "{}"); } catch (e) {}
+  if (data.accent) document.documentElement.style.setProperty("--accent", data.accent);
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var inline = function (s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\*(.+?)\*/g, "<i>$1</i>"); };
+  var comments = [];
+  var sheet = $("sheet");
+  sheet.innerHTML = '<span class="slate" id="slate"></span><h1 id="title" data-anchor="title"></h1>' + (data.subtitle ? '<p class="sub">' + esc(data.subtitle) + "</p>" : "");
+  headline($("title"), data.title || "Document");
+  $("slate").textContent = data.slate || "";
+  var secN = 0;
+  (Array.isArray(data.sections) ? data.sections : []).forEach(function (s) {
+    var sec = document.createElement("section"); sec.setAttribute("data-anchor", "section-" + s.id);
+    if (s.heading) { var h = document.createElement("h2"); secN++; h.setAttribute("data-n", String(secN).padStart(2, "0")); headline(h, s.heading); sec.appendChild(h); }
+    (s.paragraphs || []).forEach(function (txt, n) {
+      var p = document.createElement("p"); p.className = "para"; p.innerHTML = inline(txt); p.setAttribute("data-anchor", "para-" + s.id + "-" + n);
+      p.title = "Tap to comment";
+      p.onclick = function () { add(s, n, txt, p); };
+      sec.appendChild(p);
+    });
+    (Array.isArray(s.media) ? s.media : []).forEach(function (it, n) {
+      var fig = document.createElement("figure"); fig.setAttribute("data-anchor", "media-" + s.id + "-" + n);
+      var cap = document.createElement("figcaption"); cap.textContent = it.caption || it.title || "";
+      sec.appendChild(fig);
+      NEO.media(it).then(function (m) {
+        if (!m) { fig.remove(); return; }
+        fig.insertBefore(NEO.node(m, it, function (still) { var el = fig.querySelector("video, audio, img"); if (el) el.remove(); if (still) fig.insertBefore(still, cap.parentNode === fig ? cap : null); }), fig.firstChild);
+        if (cap.textContent) fig.appendChild(cap);
+      }, function () { fig.remove(); });
+    });
+    sheet.appendChild(sec);
+  });
+  function add(s, n, txt, el) {
+    var c = { where: (s.heading || s.id) + " ¶" + (n + 1), quote: String(txt).replace(/\*/g, ""), text: "", el: el };
+    comments.push(c); el.classList.add("has"); render(c);
+  }
+  function render(focus) {
+    var list = $("list"); list.innerHTML = "";
+    if (!comments.length) { var e = document.createElement("div"); e.className = "empty"; e.textContent = "Tap any paragraph to comment on it."; list.appendChild(e); }
+    comments.forEach(function (c, k) {
+      var box = document.createElement("div"); box.className = "c";
+      var x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label", "Remove comment");
+      x.onclick = function () { comments.splice(k, 1); if (!comments.some(function (o) { return o.el === c.el; })) c.el.classList.remove("has"); render(); };
+      var q = document.createElement("q"); q.textContent = c.where + " — " + c.quote;
+      var ta = document.createElement("textarea"); ta.value = c.text; ta.placeholder = "Your comment"; ta.oninput = function () { c.text = ta.value; sync(); };
+      box.appendChild(x); box.appendChild(q); box.appendChild(ta); list.appendChild(box);
+      if (c === focus) setTimeout(function () { ta.focus(); }, 0);
+    });
+    sync();
+  }
+  function sync() { $("send").disabled = !comments.some(function (c) { return c.text.trim(); }); }
+  $("send").onclick = function () {
+    var lines = comments.filter(function (c) { return c.text.trim(); }).map(function (c) { return "- " + c.where + " (\"" + c.quote.slice(0, 80) + "\"): " + c.text.trim(); });
+    NEO.answer("My comments on «" + (data.title || "the document") + "»:\n" + lines.join("\n"));
+    $("send").textContent = "Sent";
+  };
+  render();
+})();
+</script>
+</body>
+</html>

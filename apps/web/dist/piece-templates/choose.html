@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choose the direction</title>
+<!--
+  NEO piece template - CHOOSE THE DIRECTION (R10.2, 3-nov-2026)
+  The Black Box app where the person SEES, COMPARES and CHOOSES the director's options, and where NEO learns what they like.
+  Built by NEO's server: it fills the JSON in #neo-data (the options, each one's `sample`, its references, the
+  recommended one, the platform's brand) without any model. Each option's visual sample is drawn from its `sample` (palette, fonts, layout);
+  a drawing made by an agent (`drawing`: an HTML/CSS fragment) replaces the generated mock when there is one.
+  Self-contained: one file, no network, nothing external (system fonts), it works inside the stage's isolated frame.
+  Every part the robot may glide to carries data-anchor: "title", "options", "option-<id>", "send".
+  ONE answer reaches NEO as the person's words: parent.postMessage({neo:"answer", text: JSON.stringify({choice, likes, dislikes, note})}, "*").
+  Click a color, a font or a mood word to mark it: like, then dislike, then nothing. Keys: Enter or Space on a card chooses it.
+-->
+<style>
+  :root { --accent: #E0732A; --accent2: #F0A05A; --bg: #FBF8F4; --card: #fff; --ink: #1B1713; --soft: #5B534B; --line: #E4DCD2; --ok: #2F8F5B; --no: #C2453B; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: clamp(12px, 3vw, 24px); }
+  header { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
+  .slate { display: block; font: 600 11px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+  h1 { margin: 0; font: 700 clamp(20px, 3.6vw, 28px)/1.15 Georgia, "Times New Roman", serif; letter-spacing: -.01em; }
+  .tools { display: flex; gap: 8px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff; }
+  .seg button { border: 0; background: transparent; padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer; color: var(--soft); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .opts { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); align-items: start; }
+  .opts.one { grid-template-columns: minmax(0, 720px); justify-content: center; }
+  .opts.one .opt:not(.cur) { display: none; }
+  .opt { background: var(--card); border: 2px solid var(--line); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer;
+    transition: border-color .2s, box-shadow .2s, transform .2s; }
+  .opt:hover { transform: translateY(-2px); }
+  .opt.best { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+  .opt.picked { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .opt:focus-visible, button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .stage { aspect-ratio: 16 / 10; position: relative; overflow: hidden; background: #eee; border-bottom: 1px solid var(--line); }
+  .stage .drawing { position: absolute; inset: 0; overflow: hidden; }
+  .mock { position: absolute; inset: 0; display: grid; grid-template-rows: 14% 1fr 12%; }
+  .mock .bar { display: flex; align-items: center; padding: 0 6%; gap: 6px; font-size: 10px; font-weight: 700; }
+  .mock .bar i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .6; }
+  .mock .hero { padding: 7% 8%; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+  .mock .hero b { font-size: clamp(15px, 3vw, 22px); line-height: 1.05; }
+  .mock .hero span { display: block; height: 6px; border-radius: 3px; opacity: .45; background: currentColor; }
+  .mock .hero span:nth-of-type(2) { width: 62%; }
+  .mock .hero em { font-style: normal; align-self: flex-start; margin-top: 6px; padding: 5px 12px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+  .mock .foot { display: flex; align-items: center; justify-content: center; font-size: 9px; opacity: .85; }
+  .badge { position: absolute; top: 10px; left: 10px; background: var(--accent); color: #fff; font: 700 11px/1 system-ui; padding: 6px 10px; border-radius: 999px; z-index: 2; }
+  .mark { position: absolute; top: 10px; right: 10px; background: var(--ink); color: #fff; font: 700 11px/1 system-ui; padding: 6px 10px; border-radius: 999px; z-index: 2; display: none; }
+  .opt.picked .mark { display: block; }
+  .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+  .body h2 { margin: 0; font: 700 19px/1.2 Georgia, serif; }
+  .body p { margin: 0; }
+  .why { color: var(--soft); font-size: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .lab { font: 600 10.5px/1 ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--soft); margin-right: 4px; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; color: var(--ink); }
+  .chip .sw { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); }
+  .chip[data-m="like"] { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, #fff); }
+  .chip[data-m="dislike"] { border-color: var(--no); background: color-mix(in srgb, var(--no) 12%, #fff); text-decoration: line-through; }
+  .chip[data-m]::after { content: attr(data-m-sym); font-size: 12px; }
+  .refs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ref { width: 78px; font-size: 11px; color: var(--soft); text-decoration: none; }
+  .ref img { width: 78px; height: 58px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); display: block; margin-bottom: 3px; background: #f1ece5; }
+  .ref .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref.link { width: auto; border: 1px solid var(--line); border-radius: 10px; padding: 6px 9px; background: #fff; max-width: 100%; }
+  .pick { margin-top: auto; border: 0; border-radius: 12px; padding: 11px 14px; background: var(--ink); color: #fff; font: 700 14px system-ui; cursor: pointer; }
+  .opt.picked .pick { background: var(--accent); }
+  .nav { display: none; gap: 8px; justify-content: center; margin-top: 12px; }
+  .opts.one + .nav { display: flex; }
+  .nav button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 16px; font: inherit; cursor: pointer; }
+  footer { margin-top: 18px; display: grid; gap: 10px; max-width: 760px; }
+  footer label { font-size: 13px; color: var(--soft); }
+  footer textarea { width: 100%; min-height: 56px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; resize: vertical; background: #fff; }
+  .send { justify-self: start; border: 0; border-radius: 999px; padding: 12px 22px; background: var(--accent); color: #fff; font: 700 15px system-ui; cursor: pointer; }
+  .send:disabled { opacity: .4; cursor: default; }
+  .status { font-size: 13px; color: var(--soft); min-height: 1.4em; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<script type="application/json" id="neo-data">
+{
+  "lang": "en",
+  "title": "Choose the direction",
+  "slate": "NEO",
+  "brand": {"name": "NEO", "color": "#E0732A", "color2": "#F0A05A"},
+  "recommended": "a",
+  "options": [
+    {"id": "a", "title": "Warm craft", "what": "Wood, earth tones and photos of the counter.", "why": "It feels local and welcoming.",
+     "sample": {"palette": ["#3B2A20", "#E8D8C3", "#C7773A", "#F6EFE6"], "fonts": ["Georgia", "Verdana"], "layout": "logo and menu on top, big photo and the story in the middle, hours and map below", "like_ref": "local roasters' sites", "mood": "warm, local, calm"},
+     "refs": [{"title": "Local roaster site", "source": "https://example.com/roaster"}]},
+    {"id": "b", "title": "Dark minimal", "what": "Dark background, big type and very few photos.", "why": "It feels like a specialty bar.",
+     "sample": {"palette": ["#111111", "#2B2B2B", "#E5B96A", "#F5F5F5"], "fonts": ["Helvetica", "Courier New"], "layout": "one big headline on top, the menu as a list in the middle, address below", "like_ref": "specialty coffee brands", "mood": "sharp, quiet, premium"}},
+    {"id": "c", "title": "Bright and playful", "what": "Light colors, rounded shapes and little illustrations.", "why": "It makes a first visit feel easy.",
+     "sample": {"palette": ["#FFF3D6", "#FF8A5B", "#5BC0BE", "#1C2541"], "fonts": ["Trebuchet MS", "Comic Sans MS"], "layout": "illustration on top, three cards with the drinks, a bright map below", "like_ref": "friendly neighborhood cafes", "mood": "fun, bright, friendly"}}
+  ]
+}
+</script>
+<div id="app">
+  <header data-anchor="title">
+    <div><span class="slate" id="slate"></span><h1 id="title"></h1></div>
+    <div class="tools"><div class="seg" role="group" id="seg"><button type="button" id="vAll" aria-pressed="true"></button><button type="button" id="vOne" aria-pressed="false"></button></div></div>
+  </header>
+  <main class="opts" id="opts" data-anchor="options"></main>
+  <div class="nav" id="nav"><button type="button" id="prev"></button><button type="button" id="next"></button></div>
+  <footer>
+    <label for="note" id="noteL"></label>
+    <textarea id="note" data-anchor="note"></textarea>
+    <button type="button" class="send" id="send" data-anchor="send" disabled></button>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </footer>
+</div>
+<script>
+(function () {
+  var D = {}; try { D = JSON.parse(document.getElementById("neo-data").textContent) || {}; } catch (e) { D = {}; }
+  var es = String(D.lang || "en").toLowerCase().indexOf("es") === 0;
+  var T = es ? { all: "Lado a lado", one: "Una a una", pick: "Elijo esta", picked: "Elegida", best: "Recomendada", chosen: "Tu elección", palette: "Colores", fonts: "Letras", mood: "Estilo",
+                 refs: "Referencias", note: "Si quieres, cuéntame algo más (opcional)", send: "Enviar mi elección", sent: "Enviada. ¡Gracias!", need: "Elige una opción para enviar.",
+                 prev: "Anterior", next: "Siguiente", hint: "Toca un color, una letra o una palabra: me gusta, luego no me gusta, luego nada.", layout: "Composición" }
+               : { all: "Side by side", one: "One at a time", pick: "Choose this one", picked: "Chosen", best: "Recommended", chosen: "Your choice", palette: "Colors", fonts: "Fonts", mood: "Mood",
+                 refs: "References", note: "If you like, tell me more (optional)", send: "Send my choice", sent: "Sent. Thank you!", need: "Pick an option to send.",
+                 prev: "Previous", next: "Next", hint: "Tap a color, a font or a word: I like it, then I don't, then nothing.", layout: "Layout" };
+  var brand = D.brand || {}; if (/^#[0-9a-fA-F]{6}$/.test(brand.color || "")) document.documentElement.style.setProperty("--accent", brand.color);
+  if (/^#[0-9a-fA-F]{6}$/.test(brand.color2 || "")) document.documentElement.style.setProperty("--accent2", brand.color2);
+  document.documentElement.lang = es ? "es" : "en";
+  var $ = function (id) { return document.getElementById(id); };
+  $("slate").textContent = D.slate || brand.name || "NEO"; $("title").textContent = D.title || (es ? "Elige la dirección" : "Choose the direction");
+  document.title = $("title").textContent; $("vAll").textContent = T.all; $("vOne").textContent = T.one; $("noteL").textContent = T.note + " · " + T.hint;
+  $("send").textContent = T.send; $("prev").textContent = T.prev; $("next").textContent = T.next;
+  var opts = (D.options || []).slice(0, 3), picked = null, cur = 0, marks = {}, sent = false;
+  function lum(h) { var m = /^#?([0-9a-f]{6})$/i.exec(h || ""); if (!m) return 1; var n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+  function ink(bg) { return lum(bg) > 0.55 ? "#1B1713" : "#FFFFFF"; }
+  function el(tag, cls, txt) { var n = document.createElement(tag); if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; }
+  function safeColor(c, d) { return /^#[0-9a-fA-F]{3,8}$/.test(String(c || "")) ? c : d; }
+  function mock(o) {
+    var s = o.sample || {}, p = (s.palette || []).map(function (c) { return safeColor(c, "#cccccc"); }); while (p.length < 4) p.push(p[p.length - 1] || "#cccccc");
+    var f = (s.fonts || [])[0] || "Georgia", f2 = (s.fonts || [])[1] || f;
+    var m = el("div", "mock"); m.style.fontFamily = "'" + String(f2).replace(/['"<>]/g, "") + "', system-ui, sans-serif";
+    var bar = el("div", "bar"); bar.style.background = p[0]; bar.style.color = ink(p[0]); bar.appendChild(el("i")); bar.appendChild(document.createTextNode(brand.name || "NEO"));
+    var hero = el("div", "hero"); hero.style.background = p[1]; hero.style.color = ink(p[1]);
+    var b = el("b", "", o.title || ""); b.style.fontFamily = "'" + String(f).replace(/['"<>]/g, "") + "', Georgia, serif"; hero.appendChild(b); hero.appendChild(el("span")); hero.appendChild(el("span"));
+    var cta = el("em", "", es ? "Ver más" : "See more"); cta.style.background = p[2]; cta.style.color = ink(p[2]); hero.appendChild(cta);
+    var ft = el("div", "foot", s.layout ? String(s.layout).slice(0, 48) : ""); ft.style.background = p[3]; ft.style.color = ink(p[3]);
+    m.appendChild(bar); m.appendChild(hero); m.appendChild(ft); return m;
+  }
+  function chip(oid, kind, label, text, swatch, font) {
+    var key = oid + "|" + kind + "|" + text, c = el("button", "chip"); c.type = "button"; c.setAttribute("data-key", key);
+    if (swatch) { var sw = el("span", "sw"); sw.style.background = swatch; c.appendChild(sw); }
+    var t = el("span", "", label); if (font) t.style.fontFamily = "'" + String(font).replace(/['"<>]/g, "") + "', serif"; c.appendChild(t);
+    function paint() { var v = marks[key]; if (v) { c.setAttribute("data-m", v); c.setAttribute("data-m-sym", v === "like" ? "♥" : "✕"); c.setAttribute("aria-label", label + ": " + v); } else { c.removeAttribute("data-m"); c.removeAttribute("data-m-sym"); c.setAttribute("aria-label", label); } }
+    c.addEventListener("click", function (ev) { ev.stopPropagation(); if (sent) return; var v = marks[key]; if (!v) marks[key] = "like"; else if (v === "like") marks[key] = "dislike"; else delete marks[key]; paint(); });
+    paint(); c.__text = text; return c;
+  }
+  function card(o, i) {
+    var a = el("section", "opt" + (String(o.id) === String(D.recommended) ? " best" : "")); a.tabIndex = 0; a.setAttribute("data-anchor", "option-" + o.id); a.setAttribute("data-id", o.id);
+    var st = el("div", "stage");
+    if (o.drawing) { var dr = el("div", "drawing"); dr.innerHTML = o.drawing; st.appendChild(dr); } else st.appendChild(mock(o));
+    if (String(o.id) === String(D.recommended)) st.appendChild(el("span", "badge", T.best)); st.appendChild(el("span", "mark", T.chosen)); a.appendChild(st);
+    var b = el("div", "body"); b.appendChild(el("h2", "", o.title || "")); b.appendChild(el("p", "", o.what || "")); if (o.why) b.appendChild(el("p", "why", o.why));
+    var s = o.sample || {};
+    if ((s.palette || []).length) { var r = el("div", "row"); r.appendChild(el("span", "lab", T.palette)); s.palette.slice(0, 5).forEach(function (c) { r.appendChild(chip(o.id, "color", c, "color " + c, safeColor(c, "#ccc"))); }); b.appendChild(r); }
+    if ((s.fonts || []).length) { var r2 = el("div", "row"); r2.appendChild(el("span", "lab", T.fonts)); s.fonts.slice(0, 3).forEach(function (f) { r2.appendChild(chip(o.id, "font", f, (es ? "letra " : "font ") + f, null, f)); }); b.appendChild(r2); }
+    if (s.mood) { var r3 = el("div", "row"); r3.appendChild(el("span", "lab", T.mood)); String(s.mood).split(/[,;·]/).map(function (w) { return w.trim(); }).filter(Boolean).slice(0, 4).forEach(function (w) { r3.appendChild(chip(o.id, "mood", w, w)); }); b.appendChild(r3); }
+    if (s.layout) { var l = el("p", "why"); l.textContent = T.layout + ": " + s.layout; b.appendChild(l); }
+    var refs = (o.refs || []).slice(0, 3);
+    if (refs.length) { var rr = el("div", "row"); rr.appendChild(el("span", "lab", T.refs)); var box = el("div", "refs");
+      refs.forEach(function (x) { var link = /^https?:\/\//.test(x.source || ""); var n = el(link ? "a" : "div", "ref" + (x.src ? "" : " link")); if (link) { n.href = x.source; n.target = "_blank"; n.rel = "noopener noreferrer"; n.addEventListener("click", function (ev) { ev.stopPropagation(); }); }
+        if (x.src) { var im = new Image(); im.src = x.src; im.alt = x.title || ""; n.appendChild(im); } var nm = el("span", "nm", x.title || x.source || ""); n.appendChild(nm); box.appendChild(n); });
+      rr.appendChild(box); b.appendChild(rr); }
+    var pk = el("button", "pick", T.pick); pk.type = "button"; b.appendChild(pk); a.appendChild(b);
+    function choose() { if (sent) return; picked = o.id; sync(); }
+    pk.addEventListener("click", function (ev) { ev.stopPropagation(); choose(); });
+    a.addEventListener("click", choose); a.addEventListener("keydown", function (ev) { if ((ev.key === "Enter" || ev.key === " ") && ev.target === a) { ev.preventDefault(); choose(); } });
+    return a;
+  }
+  var host = $("opts");
+  opts.forEach(function (o, i) { host.appendChild(card(o, i)); });
+  function sync() {
+    var cards = host.querySelectorAll(".opt");
+    for (var i = 0; i < cards.length; i++) { var on = cards[i].getAttribute("data-id") === String(picked); cards[i].classList.toggle("picked", on); cards[i].classList.toggle("cur", i === cur); cards[i].querySelector(".pick").textContent = on ? T.picked : T.pick; }
+    $("send").disabled = sent || picked == null; $("status").textContent = picked == null && !sent ? T.need : "";
+  }
+  function view(one) { host.classList.toggle("one", one); $("vAll").setAttribute("aria-pressed", String(!one)); $("vOne").setAttribute("aria-pressed", String(one)); sync(); }
+  $("vAll").addEventListener("click", function () { view(false); }); $("vOne").addEventListener("click", function () { view(true); });
+  $("prev").addEventListener("click", function () { cur = (cur + opts.length - 1) % opts.length; sync(); }); $("next").addEventListener("click", function () { cur = (cur + 1) % opts.length; sync(); });
+  $("send").addEventListener("click", function () {
+    if (picked == null || sent) return;
+    var likes = [], dislikes = []; Object.keys(marks).forEach(function (k) { var txt = k.split("|").slice(2).join("|"); (marks[k] === "like" ? likes : dislikes).push(txt); });
+    var msg = { choice: String(picked), likes: likes, dislikes: dislikes, note: $("note").value.trim() };
+    try { parent.postMessage({ neo: "answer", text: JSON.stringify(msg) }, "*"); } catch (e) {}
+    sent = true; $("send").disabled = true; $("status").textContent = T.sent; document.getElementById("note").disabled = true;
+  });
+  sync();
+})();
+</script>
+</body>
+</html>

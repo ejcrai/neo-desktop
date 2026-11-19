@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NEO",
+  "version": "10.2.0",
+  "identifier": "cloud.neo.desktop",
+  "build": {
+    "frontendDist": "../../apps/web/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "NEO",
+        "width": 1380,
+        "height": 880,
+        "minWidth": 980,
+        "minHeight": 660,
+        "center": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "msi",
+      "dmg",
+      "app",
+      "appimage",
+      "deb"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcyQjU3Njk2QjQ3NzdFNkMKUldSc2ZuZTBsbmExY253bEY5ZjMrY05iOEttSk5yT2xoL29yRXRCRWZ1SGVlWDBpRkxnajc3RTQK",
+      "endpoints": [
+        "https://github.com/ejcrai/neo-desktop/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,2 @@
+import{N as r}from"./chunk-SKMLHHM7.js";function o(e=""){let t=String(typeof window<"u"&&window.NEO_CONFIG?.studio||"https://getneostudio.pages.dev").trim(),n=/\.html?$/i.test(t)?t.replace(/\/[^/]*$/,""):t.replace(/\/+$/,"");return e?`${n}/${e.replace(/^\/+/,"")}`:`${n}/`}var s=e=>e==null?"\u2014":`$${Number(e).toLocaleString(r()==="es"?"es-MX":"en-US",{maximumFractionDigits:0})}`;export{o as a,s as b};
+//# sourceMappingURL=chunk-EMS7L6AA.js.map

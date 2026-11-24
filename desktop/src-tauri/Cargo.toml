@@ -1,6 +1,6 @@
 [package]
 name = "neo-desktop"
-version = "10.2.8"
+version = "10.2.9"
 description = "NEO Desktop — Arnés Local & Cloud (Tauri v2)"
 authors = ["Eduardo Castellano"]
 edition = "2021"

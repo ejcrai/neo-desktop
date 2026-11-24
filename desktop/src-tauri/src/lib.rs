@@ -19,6 +19,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, State, WindowEvent,
 };
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const KEYRING_SERVICE: &str = "cloud.neo.desktop";
 const DEFAULT_OPENAI_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -40,6 +41,7 @@ static ACTIVE_LOCAL_TASKS: AtomicUsize = AtomicUsize::new(0);
 
 pub struct DesktopState {
     pub workspace_dir: Mutex<Option<PathBuf>>,
+    pub pending_oauth: tokio::sync::Mutex<Option<(tokio::net::TcpListener, String)>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -561,6 +563,139 @@ fn workspace_file_op(
     }
 }
 
+#[tauri::command]
+fn open_external_url(app: AppHandle, url: String) -> Result<bool, String> {
+    let u = url.trim();
+    if !u.starts_with("https://") && !u.starts_with("http://") {
+        return Err("Unsupported URL scheme".to_string());
+    }
+    use tauri_plugin_shell::ShellExt;
+    app.shell()
+        .open(u, None)
+        .map_err(|e| format!("Failed to open external URL: {}", e))?;
+    Ok(true)
+}
+
+#[tauri::command]
+async fn prepare_browser_oauth(state: State<'_, DesktopState>) -> Result<Value, String> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| format!("Failed to bind local OAuth callback: {}", e))?;
+    let port = listener
+        .local_addr()
+        .map_err(|e| format!("Failed to read OAuth callback port: {}", e))?
+        .port();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let state_tok = format!("neo_{:x}_{:x}", nanos, std::process::id());
+    {
+        let mut guard = state.pending_oauth.lock().await;
+        *guard = Some((listener, state_tok.clone()));
+    }
+    Ok(json!({
+        "callback_url": format!("http://127.0.0.1:{}/auth/callback", port),
+        "state": state_tok
+    }))
+}
+
+#[tauri::command]
+async fn complete_browser_oauth(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+    auth_url: String,
+) -> Result<Value, String> {
+    let u = auth_url.trim().to_string();
+    if !u.starts_with("https://") && !u.starts_with("http://") {
+        return Err("Invalid OAuth URL".to_string());
+    }
+    let (listener, expected_state) = {
+        let mut guard = state.pending_oauth.lock().await;
+        guard.take().ok_or_else(|| "No pending OAuth flow".to_string())?
+    };
+    {
+        use tauri_plugin_shell::ShellExt;
+        app.shell()
+            .open(&u, None)
+            .map_err(|e| format!("Failed to open browser: {}", e))?;
+    }
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err("OAuth login timed out".to_string());
+        }
+        let (mut socket, _) = tokio::time::timeout(remaining, listener.accept())
+            .await
+            .map_err(|_| "OAuth login timed out".to_string())?
+            .map_err(|e| format!("OAuth socket error: {}", e))?;
+        let mut buf = Vec::with_capacity(16384);
+        let mut chunk = [0u8; 4096];
+        let mut header_end: Option<usize> = None;
+        let mut content_len: usize = 0;
+        loop {
+            let n = tokio::time::timeout(Duration::from_secs(5), socket.read(&mut chunk))
+                .await
+                .unwrap_or(Ok(0))
+                .unwrap_or(0);
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+            if header_end.is_none() {
+                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    header_end = Some(pos + 4);
+                    let hdr = String::from_utf8_lossy(&buf[..pos]);
+                    for line in hdr.lines() {
+                        if let Some((k, v)) = line.split_once(':') {
+                            if k.trim().eq_ignore_ascii_case("content-length") {
+                                content_len = v.trim().parse::<usize>().unwrap_or(0).min(65536);
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(he) = header_end {
+                if buf.len() >= he + content_len {
+                    break;
+                }
+            }
+            if buf.len() > 65536 {
+                break;
+            }
+        }
+        let head_str = String::from_utf8_lossy(
+            header_end.map(|he| &buf[..he]).unwrap_or(&buf[..]),
+        )
+        .to_string();
+        if head_str.starts_with("OPTIONS ") {
+            let resp = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n";
+            let _ = socket.write_all(resp.as_bytes()).await;
+            continue;
+        }
+        if head_str.starts_with("POST ") {
+            let body_bytes = header_end.map(|he| &buf[he..]).unwrap_or(&[]);
+            let parsed: Value = serde_json::from_slice(body_bytes).unwrap_or(Value::Null);
+            let got_state = parsed
+                .get("app_state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if got_state != expected_state {
+                let resp = "HTTP/1.1 403 Forbidden\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n";
+                let _ = socket.write_all(resp.as_bytes()).await;
+                return Err("OAuth state mismatch".to_string());
+            }
+            let resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"ok\":true}";
+            let _ = socket.write_all(resp.as_bytes()).await;
+            show_main_window(&app);
+            return Ok(parsed);
+        }
+        let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<!doctype html><html><body><p>NEO OAuth callback active.</p></body></html>";
+        let _ = socket.write_all(resp.as_bytes()).await;
+    }
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -574,6 +709,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(DesktopState {
             workspace_dir: Mutex::new(None),
+            pending_oauth: tokio::sync::Mutex::new(None),
         })
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
@@ -616,7 +752,7 @@ pub fn run() {
                     "status" => {
                         show_main_window(app);
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.eval("window.location.assign('/app/connections');");
+                            let _ = w.eval("window.location.assign('/app/studio?tab=conexiones');");
                         }
                     }
                     "quit" => {
@@ -668,6 +804,9 @@ pub fn run() {
             execute_local_model_step,
             pick_project_folder,
             workspace_file_op,
+            open_external_url,
+            prepare_browser_oauth,
+            complete_browser_oauth,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NEO Desktop application");

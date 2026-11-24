@@ -1,0 +1,2 @@
+function e(){return typeof window<"u"&&("__TAURI_INTERNALS__"in window||"__TAURI__"in window||window.location.protocol==="tauri:"||window.location.hostname==="tauri.localhost"||window.__NEO_DESKTOP__===!0)}var o="https://api.178-104-87-104.sslip.io";function i(){try{let t=localStorage.getItem("neo.desktop.api_url");if(t&&/^https?:\/\//i.test(t.trim()))return t.trim().replace(/\/+$/,"")}catch{}return o}export{e as a,i as b};
+//# sourceMappingURL=chunk-3CZRLNEM.js.map
